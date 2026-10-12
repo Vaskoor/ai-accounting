@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, logAudit } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -11,14 +11,19 @@ export async function GET() {
      FROM voucher_entries ve JOIN ledgers l ON l.id = ve.ledger_id
      WHERE ve.voucher_id = ?`
   );
-  const result = vouchers.map((v) => ({ ...v, entries: entryStmt.all(v.id) }));
+  const ccStmt = db.prepare("SELECT name FROM cost_centers WHERE id = ?");
+  const result = vouchers.map((v) => ({
+    ...v,
+    cost_center: v.cost_center_id ? (ccStmt.get(v.cost_center_id) as any)?.name : null,
+    entries: entryStmt.all(v.id),
+  }));
   return NextResponse.json(result);
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { voucher_no, voucher_type, date, narration, entries } = body;
+    const { voucher_no, voucher_type, date, narration, reference, cost_center_id, entries } = body;
     if (!voucher_type || !date || !Array.isArray(entries) || entries.length < 2) {
       return NextResponse.json({ error: "voucher_type, date and at least 2 entries required" }, { status: 400 });
     }
@@ -36,13 +41,16 @@ export async function POST(req: Request) {
     const db = getDb();
     const no = voucher_no || `${voucher_type.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
     const tx = db.transaction(() => {
-      const v = db.prepare("INSERT INTO vouchers (voucher_no, voucher_type, date, narration) VALUES (?, ?, ?, ?)").run(no, voucher_type, date, narration || "");
+      const v = db.prepare(
+        "INSERT INTO vouchers (voucher_no, voucher_type, date, narration, reference, cost_center_id) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(no, voucher_type, date, narration || "", reference || "", cost_center_id || null);
       const vid = Number(v.lastInsertRowid);
       const insE = db.prepare("INSERT INTO voucher_entries (voucher_id, ledger_id, amount, entry_type) VALUES (?, ?, ?, ?)");
       for (const e of entries) insE.run(vid, Number(e.ledger_id), Number(e.amount), e.entry_type);
       return vid;
     });
     const vid = tx();
+    logAudit("create", "voucher", vid, `${no} (${voucher_type}) Dr=${debit} Cr=${credit}`);
     const voucher = db.prepare("SELECT * FROM vouchers WHERE id = ?").get(vid);
     return NextResponse.json(voucher, { status: 201 });
   } catch (e: any) {
