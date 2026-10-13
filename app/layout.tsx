@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Nav from "@/components/Nav";
+import Sidebar from "@/components/Sidebar";
 import Footer from "@/components/Footer";
 import ThemeProvider from "@/components/ThemeProvider";
+import CommandPalette from "@/components/CommandPalette";
 
 export const metadata: Metadata = {
-  title: "TallyWeb - Accounting",
-  description: "A Tally-style double-entry accounting app",
+  title: "TallyWeb — Nepali Accounting",
+  description: "A Tally-style double-entry accounting app with Nepali fiscal year",
 };
 
 export default function RootLayout({
@@ -18,9 +19,14 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
         <ThemeProvider>
-          <Nav />
-          <div className="flex-1">{children}</div>
-          <Footer />
+          <div className="flex min-h-screen flex-1">
+            <Sidebar />
+            <div className="flex min-h-screen flex-1 flex-col">
+              <main className="flex-1">{children}</main>
+              <Footer />
+            </div>
+          </div>
+          <CommandPalette />
         </ThemeProvider>
       </body>
     </html>
