@@ -1,72 +1,43 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import PageHeader from "@/components/PageHeader";
+import DataTable, { Column } from "@/components/DataTable";
 import { money } from "@/lib/format";
 
-type Ledger = { id: number; name: string; group_name: string; opening_balance: number };
+type Ledger = { id: number; name: string; group_name: string; sub_group: string | null; opening_balance: number };
+
+const groupTone: Record<string, string> = {
+  Assets: "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+  Liabilities: "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+  Equity: "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  Income: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+  Expenses: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+};
 
 export default function LedgersPage() {
   const [rows, setRows] = useState<Ledger[]>([]);
-  const [form, setForm] = useState({ name: "", group_name: "Assets", opening_balance: "0" });
-  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const load = useCallback(() => {
+    setLoading(true); setErr("");
+    fetch("/api/ledgers").then((r) => r.json()).then(setRows).catch((e) => setErr(String(e))).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const load = () => fetch("/api/ledgers").then((r) => r.json()).then(setRows);
-  useEffect(() => { load(); }, []);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg("");
-    const r = await fetch("/api/ledgers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, opening_balance: Number(form.opening_balance) }),
-    });
-    if (r.ok) {
-      setForm({ name: "", group_name: "Assets", opening_balance: "0" });
-      setMsg("Ledger created");
-      load();
-    } else {
-      const j = await r.json();
-      setMsg(j.error || "Error");
-    }
-  }
-
-  const groups = ["Assets", "Liabilities", "Equity", "Income", "Expenses"];
-  const field = "rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900";
+  const columns: Column<Ledger>[] = [
+    { key: "name", header: "Ledger Name", sortable: true, render: (l) => <span className="font-medium text-slate-800 dark:text-slate-200">{l.name}</span> },
+    { key: "group_name", header: "Group", sortable: true, sortValue: (l) => l.group_name, render: (l) => <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${groupTone[l.group_name] || "bg-slate-100 dark:bg-slate-800"}`}>{l.group_name}</span> },
+    { key: "sub_group", header: "Sub-group", render: (l) => <span className="text-slate-500 dark:text-slate-400">{l.sub_group || "—"}</span> },
+    { key: "opening_balance", header: "Opening Balance", right: true, sortable: true, sortValue: (l) => l.opening_balance, render: (l) => <span className="font-semibold">{money(l.opening_balance)}</span> },
+  ];
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      <h1 className="mb-6 text-2xl font-bold text-slate-900">Ledgers</h1>
-
-      <form onSubmit={submit} className="mb-8 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-4">
-        <input required placeholder="Ledger name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={field} />
-        <select value={form.group_name} onChange={(e) => setForm({ ...form, group_name: e.target.value })} className={field}>
-          {groups.map((g) => <option key={g}>{g}</option>)}
-        </select>
-        <input type="number" placeholder="Opening balance" value={form.opening_balance} onChange={(e) => setForm({ ...form, opening_balance: e.target.value })} className={field} />
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Add Ledger</button>
-        {msg && <p className="col-span-full text-sm text-slate-500">{msg}</p>}
-      </form>
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-              <th className="px-6 py-3 font-medium">Name</th>
-              <th className="px-6 py-3 font-medium">Group</th>
-              <th className="px-6 py-3 text-right font-medium">Opening Balance</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((l) => (
-              <tr key={l.id} className="hover:bg-slate-50">
-                <td className="px-6 py-3 font-medium text-slate-800">{l.name}</td>
-                <td className="px-6 py-3 text-slate-500">{l.group_name}</td>
-                <td className="px-6 py-3 text-right font-semibold text-slate-900">{money(l.opening_balance)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <PageHeader title="Chart of Accounts" subtitle="All ledgers grouped by Assets / Liabilities / Equity / Income / Expenses"
+        actions={<button onClick={load} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">↻ Refresh</button>} />
+      {err && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">{err} <button onClick={load} className="underline">retry</button></div>}
+      <DataTable columns={columns} rows={rows} loading={loading}
+        searchKeys={["name", "group_name", "sub_group"]} searchPlaceholder="Search ledger, group…" />
     </main>
   );
 }

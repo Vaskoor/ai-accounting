@@ -1,151 +1,51 @@
 "use client";
-import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import PageHeader from "@/components/PageHeader";
+import DataTable, { Column } from "@/components/DataTable";
 import { money } from "@/lib/format";
 
-type Ledger = { id: number; name: string; group_name: string };
-type Entry = { ledger_id: string; amount: string; entry_type: "Dr" | "Cr" };
-type Voucher = { id: number; voucher_no: string; voucher_type: string; date: string; narration: string; entries: any[] };
+type Voucher = { id: number; voucher_no: string; voucher_type: string; date: string; narration: string; reference: string; entries: { amount: number; entry_type: string; ledger?: string }[] };
 
-const TYPES = ["Sales", "Purchase", "Receipt", "Payment", "Journal", "Contra"];
-const field = "rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900";
-
-function VouchersInner() {
-  const params = useSearchParams();
-  const [ledgers, setLedgers] = useState<Ledger[]>([]);
-  const [vouchers, setVouchers] = useState<Voucher[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({
-    voucher_type: "Sales",
-    date: new Date().toISOString().slice(0, 10),
-    narration: "",
-    entries: [
-      { ledger_id: "", amount: "", entry_type: "Dr" as const },
-      { ledger_id: "", amount: "", entry_type: "Cr" as const },
-    ] as Entry[],
-  });
-
-  const load = () => fetch("/api/vouchers").then((r) => r.json()).then(setVouchers);
-
-  useEffect(() => {
-    fetch("/api/ledgers").then((r) => r.json()).then(setLedgers);
-    load();
-    if (params.get("new")) setShowForm(true);
-  }, [params]);
-
-  const debit = form.entries.filter((e) => e.entry_type === "Dr").reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const credit = form.entries.filter((e) => e.entry_type === "Cr").reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const balanced = Math.abs(debit - credit) < 0.001 && debit > 0;
-
-  function setEntry(i: number, patch: Partial<Entry>) {
-    const entries = form.entries.map((e, idx) => (idx === i ? { ...e, ...patch } : e));
-    setForm({ ...form, entries });
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg("");
-    const r = await fetch("/api/vouchers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        voucher_type: form.voucher_type,
-        date: form.date,
-        narration: form.narration,
-        entries: form.entries.map((x) => ({ ledger_id: Number(x.ledger_id), amount: Number(x.amount), entry_type: x.entry_type })),
-      }),
-    });
-    if (r.ok) {
-      setMsg("Voucher saved");
-      setForm({ ...form, narration: "", entries: [{ ledger_id: "", amount: "", entry_type: "Dr" }, { ledger_id: "", amount: "", entry_type: "Cr" }] });
-      load();
-    } else {
-      const j = await r.json();
-      setMsg(j.error || "Error");
-    }
-  }
-
-  return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Vouchers</h1>
-        <button onClick={() => setShowForm((s) => !s)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
-          {showForm ? "Close" : "+ New Voucher"}
-        </button>
-      </div>
-
-      {showForm && (
-        <form onSubmit={submit} className="mb-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <select value={form.voucher_type} onChange={(e) => setForm({ ...form, voucher_type: e.target.value })} className={field}>
-              {TYPES.map((t) => <option key={t}>{t}</option>)}
-            </select>
-            <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className={field} />
-            <input placeholder="Narration" value={form.narration} onChange={(e) => setForm({ ...form, narration: e.target.value })} className={field} />
-          </div>
-
-          <div className="space-y-2">
-            {form.entries.map((en, i) => (
-              <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
-                <select value={en.ledger_id} onChange={(e) => setEntry(i, { ledger_id: e.target.value })} className={`${field} sm:col-span-6`} required>
-                  <option value="">Select ledger...</option>
-                  {ledgers.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.group_name})</option>)}
-                </select>
-                <select value={en.entry_type} onChange={(e) => setEntry(i, { entry_type: e.target.value as "Dr" | "Cr" })} className={`${field} sm:col-span-2`}>
-                  <option value="Dr">Dr</option><option value="Cr">Cr</option>
-                </select>
-                <input type="number" placeholder="Amount" value={en.amount} onChange={(e) => setEntry(i, { amount: e.target.value })} className={`${field} sm:col-span-3`} required />
-                <button type="button" onClick={() => setForm({ ...form, entries: form.entries.filter((_, idx) => idx !== i) })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 sm:col-span-1">X</button>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-4">
-            <button type="button" onClick={() => setForm({ ...form, entries: [...form.entries, { ledger_id: "", amount: "", entry_type: "Dr" }] })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">+ Add line</button>
-            <span className={`text-sm font-medium ${balanced ? "text-emerald-600" : "text-rose-600"}`}>
-              Dr {money(debit)} / Cr {money(credit)} {balanced ? "- Balanced" : "- Not balanced"}
-            </span>
-            <button disabled={!balanced} className="ml-auto rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">Save Voucher</button>
-          </div>
-          {msg && <p className="mt-3 text-sm text-slate-500">{msg}</p>}
-        </form>
-      )}
-
-      <div className="space-y-3">
-        {vouchers.map((v) => (
-          <div key={v.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="rounded-md bg-slate-900 px-2 py-0.5 text-xs font-medium text-white">{v.voucher_type}</span>
-                <span className="font-mono text-xs text-slate-500">{v.voucher_no}</span>
-                <span className="text-xs text-slate-400">{v.date}</span>
-              </div>
-              <span className="text-xs text-slate-500">{v.narration}</span>
-            </div>
-            <table className="w-full text-sm">
-              <tbody className="divide-y divide-slate-100">
-                {v.entries.map((e, i) => (
-                  <tr key={i}>
-                    <td className="py-1.5 text-slate-700">{e.ledger}</td>
-                    <td className="py-1.5 text-right text-slate-400">{e.entry_type}</td>
-                    <td className="py-1.5 text-right font-medium text-slate-900">{money(e.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
-        {vouchers.length === 0 && <p className="text-sm text-slate-400">No vouchers yet.</p>}
-      </div>
-    </main>
-  );
-}
+const typeTone: Record<string, string> = {
+  Sales: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+  Purchase: "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
+  Receipt: "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  Payment: "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+  Journal: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+};
 
 export default function VouchersPage() {
+  const [rows, setRows] = useState<Voucher[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const load = useCallback(() => {
+    setLoading(true); setErr("");
+    fetch("/api/vouchers").then((r) => r.json()).then(setRows).catch((e) => setErr(String(e))).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const columns: Column<Voucher>[] = [
+    { key: "voucher_no", header: "Voucher No", sortable: true, render: (v) => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{v.voucher_no}</span> },
+    { key: "voucher_type", header: "Type", sortable: true, render: (v) => <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeTone[v.voucher_type] || "bg-slate-100 dark:bg-slate-800"}`}>{v.voucher_type}</span> },
+    { key: "date", header: "Date", sortable: true, sortValue: (v) => v.date },
+    { key: "narration", header: "Narration", render: (v) => <span className="text-slate-600 dark:text-slate-300">{v.narration}</span> },
+    { key: "reference", header: "Reference", render: (v) => v.reference ? <span className="font-mono text-xs text-slate-400">{v.reference}</span> : "—" },
+    { key: "amount", header: "Amount", right: true, sortable: true, sortValue: (v) => v.entries.filter((e) => e.entry_type === "Dr").reduce((s, e) => s + e.amount, 0), render: (v) => {
+      const dr = v.entries.filter((e) => e.entry_type === "Dr").reduce((s, e) => s + e.amount, 0);
+      return <span className="font-semibold">{money(dr)}</span>;
+    } },
+  ];
+
   return (
-    <Suspense fallback={<main className="mx-auto max-w-6xl px-6 py-8 text-sm text-slate-400">Loading...</main>}>
-      <VouchersInner />
-    </Suspense>
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <PageHeader title="Vouchers" subtitle="All double-entry vouchers · search, sort, paginate"
+        actions={<><button onClick={load} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">↻ Refresh</button>
+          <Link href="/vouchers?new=1" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">+ New Voucher</Link></>} />
+      {err && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">{err} <button onClick={load} className="underline">retry</button></div>}
+      <DataTable columns={columns} rows={rows} loading={loading}
+        searchKeys={[(v) => v.voucher_no, (v) => v.narration, (v) => v.voucher_type, (v) => v.reference]}
+        searchPlaceholder="Search voucher no, type, narration…" />
+    </main>
   );
 }

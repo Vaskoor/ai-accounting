@@ -1,75 +1,44 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import PageHeader from "@/components/PageHeader";
+import DataTable, { Column } from "@/components/DataTable";
 import { money } from "@/lib/format";
 
-type Item = { id: number; name: string; unit: string; rate: number; quantity: number; hsn: string; gst_rate: number };
+type Stock = { id: number; name: string; unit: string; rate: number; quantity: number; reorder_level: number; hsn: string | null; gst_rate: number };
 
 export default function StockPage() {
-  const [rows, setRows] = useState<Item[]>([]);
-  const [form, setForm] = useState({ name: "", unit: "pcs", rate: "", quantity: "", hsn: "", gst_rate: "18" });
-  const [msg, setMsg] = useState("");
+  const [rows, setRows] = useState<Stock[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const load = useCallback(() => {
+    setLoading(true); setErr("");
+    fetch("/api/stock").then((r) => r.json()).then(setRows).catch((e) => setErr(String(e))).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const load = () => fetch("/api/stock").then((r) => r.json()).then(setRows);
-  useEffect(() => { load(); }, []);
+  const lowCount = rows.filter((s) => s.quantity <= s.reorder_level).length;
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const r = await fetch("/api/stock", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, rate: Number(form.rate), quantity: Number(form.quantity), gst_rate: Number(form.gst_rate) }),
-    });
-    if (r.ok) { setForm({ name: "", unit: "pcs", rate: "", quantity: "", hsn: "", gst_rate: "18" }); setMsg("Item added"); load(); }
-    else { const j = await r.json(); setMsg(j.error || "Error"); }
-  }
-
-  const field = "rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900";
-  const totalValue = rows.reduce((s, r) => s + r.rate * r.quantity, 0);
+  const columns: Column<Stock>[] = [
+    { key: "name", header: "Item", sortable: true, render: (s) => (
+      <span className="font-medium text-slate-800 dark:text-slate-200">{s.name}
+        {s.quantity <= s.reorder_level && <span className="ml-2 rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">low</span>}
+      </span>) },
+    { key: "unit", header: "Unit", render: (s) => <span className="text-slate-500 dark:text-slate-400">{s.unit}</span> },
+    { key: "rate", header: "Rate", right: true, sortable: true, sortValue: (s) => s.rate, render: (s) => money(s.rate) },
+    { key: "quantity", header: "Qty", right: true, sortable: true, sortValue: (s) => s.quantity, render: (s) => <span className={s.quantity <= s.reorder_level ? "font-semibold text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-200"}>{s.quantity}</span> },
+    { key: "reorder_level", header: "Reorder At", right: true, render: (s) => <span className="text-slate-400">{s.reorder_level}</span> },
+    { key: "value", header: "Stock Value", right: true, sortable: true, sortValue: (s) => s.rate * s.quantity, render: (s) => <span className="font-semibold">{money(s.rate * s.quantity)}</span> },
+    { key: "gst_rate", header: "VAT %", right: true, render: (s) => <span className="text-slate-500 dark:text-slate-400">{s.gst_rate}%</span> },
+  ];
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Stock Items</h1>
-        <span className="text-sm text-slate-500">Total value: <b className="text-slate-900">{money(totalValue)}</b></span>
-      </div>
-
-      <form onSubmit={submit} className="mb-8 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-6">
-        <input required placeholder="Item name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={`${field} sm:col-span-2`} />
-        <input placeholder="Unit" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className={field} />
-        <input type="number" placeholder="Rate" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} className={field} />
-        <input type="number" placeholder="Qty" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} className={field} />
-        <input placeholder="HSN" value={form.hsn} onChange={(e) => setForm({ ...form, hsn: e.target.value })} className={field} />
-        <input type="number" placeholder="GST %" value={form.gst_rate} onChange={(e) => setForm({ ...form, gst_rate: e.target.value })} className={field} />
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 sm:col-span-5">Add Item</button>
-        {msg && <p className="col-span-full text-sm text-slate-500">{msg}</p>}
-      </form>
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-              <th className="px-6 py-3 font-medium">Item</th>
-              <th className="px-6 py-3 font-medium">HSN</th>
-              <th className="px-6 py-3 text-right font-medium">Rate</th>
-              <th className="px-6 py-3 text-right font-medium">Qty</th>
-              <th className="px-6 py-3 text-right font-medium">GST</th>
-              <th className="px-6 py-3 text-right font-medium">Value</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((it) => (
-              <tr key={it.id} className="hover:bg-slate-50">
-                <td className="px-6 py-3 font-medium text-slate-800">{it.name}</td>
-                <td className="px-6 py-3 font-mono text-xs text-slate-500">{it.hsn || "-"}</td>
-                <td className="px-6 py-3 text-right text-slate-600">{money(it.rate)}</td>
-                <td className="px-6 py-3 text-right text-slate-600">{it.quantity} {it.unit}</td>
-                <td className="px-6 py-3 text-right text-slate-600">{it.gst_rate}%</td>
-                <td className="px-6 py-3 text-right font-semibold text-slate-900">{money(it.rate * it.quantity)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <PageHeader title="Stock" subtitle="Inventory items · low-stock items flagged in red"
+        actions={<button onClick={load} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">↻ Refresh</button>} />
+      {err && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">{err} <button onClick={load} className="underline">retry</button></div>}
+      {lowCount > 0 && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">⚠ {lowCount} item(s) at or below reorder level — restock soon.</div>}
+      <DataTable columns={columns} rows={rows} loading={loading}
+        searchKeys={["name", "hsn"]} searchPlaceholder="Search item, HSN…" />
     </main>
   );
 }

@@ -1,70 +1,45 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import PageHeader from "@/components/PageHeader";
+import DataTable, { Column } from "@/components/DataTable";
+import { money } from "@/lib/format";
 
-type Party = { id: number; name: string; type: string; gstin: string; phone: string; email: string; address: string };
+type Party = { id: number; name: string; type: string; gstin: string | null; phone: string | null; email: string | null; credit_days: number; credit_limit: number };
 
 export default function PartiesPage() {
   const [rows, setRows] = useState<Party[]>([]);
-  const [form, setForm] = useState({ name: "", type: "Customer", gstin: "", phone: "", email: "", address: "" });
-  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [filter, setFilter] = useState("All");
+  const load = useCallback(() => {
+    setLoading(true); setErr("");
+    fetch("/api/parties").then((r) => r.json()).then(setRows).catch((e) => setErr(String(e))).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const load = () => fetch("/api/parties").then((r) => r.json()).then(setRows);
-  useEffect(() => { load(); }, []);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const r = await fetch("/api/parties", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (r.ok) { setForm({ name: "", type: "Customer", gstin: "", phone: "", email: "", address: "" }); setMsg("Party created"); load(); }
-    else { const j = await r.json(); setMsg(j.error || "Error"); }
-  }
-
-  const field = "rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900";
+  const filtered = filter === "All" ? rows : rows.filter((p) => p.type === filter);
+  const columns: Column<Party>[] = [
+    { key: "name", header: "Name", sortable: true, render: (p) => <span className="font-medium text-slate-800 dark:text-slate-200">{p.name}</span> },
+    { key: "type", header: "Type", sortable: true, render: (p) => <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${p.type === "Customer" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"}`}>{p.type}</span> },
+    { key: "gstin", header: "PAN / VAT No", render: (p) => p.gstin ? <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{p.gstin}</span> : "—" },
+    { key: "phone", header: "Phone", render: (p) => <span className="text-slate-500 dark:text-slate-400">{p.phone || "—"}</span> },
+    { key: "credit_days", header: "Credit Days", right: true, sortable: true, sortValue: (p) => p.credit_days, render: (p) => <span>{p.credit_days}</span> },
+    { key: "credit_limit", header: "Credit Limit", right: true, sortable: true, sortValue: (p) => p.credit_limit, render: (p) => <span className="font-semibold">{money(p.credit_limit)}</span> },
+  ];
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      <h1 className="mb-6 text-2xl font-bold text-slate-900">Parties</h1>
-
-      <form onSubmit={submit} className="mb-8 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-3">
-        <input required placeholder="Party name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={field} />
-        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={field}>
-          <option>Customer</option><option>Supplier</option>
-        </select>
-        <input placeholder="GSTIN" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} className={field} />
-        <input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={field} />
-        <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={field} />
-        <input placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={field} />
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 sm:col-span-3">Add Party</button>
-        {msg && <p className="col-span-full text-sm text-slate-500">{msg}</p>}
-      </form>
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-              <th className="px-6 py-3 font-medium">Name</th>
-              <th className="px-6 py-3 font-medium">Type</th>
-              <th className="px-6 py-3 font-medium">GSTIN</th>
-              <th className="px-6 py-3 font-medium">Phone</th>
-              <th className="px-6 py-3 font-medium">Email</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((p) => (
-              <tr key={p.id} className="hover:bg-slate-50">
-                <td className="px-6 py-3 font-medium text-slate-800">{p.name}</td>
-                <td className="px-6 py-3"><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${p.type === "Customer" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"}`}>{p.type}</span></td>
-                <td className="px-6 py-3 font-mono text-xs text-slate-500">{p.gstin || "-"}</td>
-                <td className="px-6 py-3 text-slate-500">{p.phone || "-"}</td>
-                <td className="px-6 py-3 text-slate-500">{p.email || "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <PageHeader title="Parties" subtitle="Customers and suppliers"
+        actions={<button onClick={load} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">↻ Refresh</button>} />
+      {err && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">{err} <button onClick={load} className="underline">retry</button></div>}
+      <div className="mb-3 flex gap-1">
+        {["All", "Customer", "Supplier"].map((t) => (
+          <button key={t} onClick={() => setFilter(t)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${filter === t ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"}`}>{t}</button>
+        ))}
       </div>
+      <DataTable columns={columns} rows={filtered} loading={loading}
+        searchKeys={["name", "gstin", "phone", "email"]} searchPlaceholder="Search party, PAN, phone…" />
     </main>
   );
 }
