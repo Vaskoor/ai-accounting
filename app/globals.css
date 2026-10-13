@@ -3,8 +3,44 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
+  --bg: #f8fafc;
+  --bg2: #ffffff;
+  --bg3: #f1f5f9;
+  --fg: #0f172a;
+  --fg2: #475569;
+  --border: #e2e8f0;
 }
+.dark {
+  --bg: #0b0e14;
+  --bg2: #12161f;
+  --bg3: #1c212d;
+  --fg: #e6edf3;
+  --fg2: #8b949e;
+  --border: #2a313c;
+}
+
+html, body { height: 100%; }
 body {
-  background: var(--background);
+  background: var(--bg);
+  color: var(--fg);
+  font-feature-settings: "tnum" 1;
 }
+
+/* custom scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fg2); }
+
+/* skeleton loading */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--border) 50%, var(--bg3) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* smooth theme transitions */
+.theme-tx { transition: background-color .15s, border-color .15s, color .15s; }
+
+/* number alignment for tables */
+.tabular { font-variant-numeric: tabular-nums; }
