@@ -4,10 +4,11 @@ import Sidebar from "@/components/Sidebar";
 import Footer from "@/components/Footer";
 import ThemeProvider from "@/components/ThemeProvider";
 import CommandPalette from "@/components/CommandPalette";
+import ChatBot from "@/components/ChatBot";
 
 export const metadata: Metadata = {
-  title: "TallyWeb — Nepali Accounting",
-  description: "A Tally-style double-entry accounting app with Nepali fiscal year",
+  title: "TallyWeb — Nepali AI Accounting",
+  description: "A Tally-style double-entry accounting app with Nepali fiscal year + AI bill extraction",
 };
 
 export default function RootLayout({
@@ -27,6 +28,7 @@ export default function RootLayout({
             </div>
           </div>
           <CommandPalette />
+          <ChatBot />
         </ThemeProvider>
       </body>
     </html>

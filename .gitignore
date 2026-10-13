@@ -10,3 +10,4 @@ data/
 .env*
 tsconfig.tsbuildinfo
 *.bak
+data/grok-key.txt
